@@ -1,3 +1,4 @@
+```
 aeromatch/
 │
 ├── cmd/                     # Executable entrypoints
@@ -38,7 +39,7 @@ aeromatch/
 │       └── id_generator.go
 │
 ├── pkg/                      # Public reusable packages
-│   └── aeromatch/            
+│   └── aeromatch/
 │       ├── client.go
 │       └── types.go
 │
@@ -61,3 +62,4 @@ aeromatch/
 ├── go.mod
 ├── go.sum
 └── README.md
+```
