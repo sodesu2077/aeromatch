@@ -91,22 +91,38 @@ func (ob *OrderBook) ProcessSellOrder(order *models.Order) {
 
 }
 
-func (ob *OrderBook) GetBestBidPrice() (float64, bool) {
-	head := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ob.bids.head)))
-	if head == nil {
-		return 0, false
-	}
-	order := (*OrderNode)(head)
-	return order.order.Price, true
+func (ob *OrderBook) AddBid(order *models.Order) {
+
 }
 
-func (ob *OrderBook) GetBestAskPrice() (float64, bool) {
-	head := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ob.asks.head)))
+func (ob *OrderBook) AddAsk(order *models.Order) {
+
+}
+
+func (ob *OrderBook) removeBid(order *models.Order) {
+
+}
+
+func (ob *OrderBook) removeAsk(order *models.Order) {
+	
+}
+
+func (ob *OrderBook) GetBestBid() (*models.Order, bool) {
+	head := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ob.bids.head)))
 	if head == nil {
-		return 0, false
+		return nil, false
 	}
 	order := (*OrderNode)(head)
-	return order.order.Price, true
+	return order.order, true
+}
+
+func (ob *OrderBook) GetBestAsk() (*models.Order, bool) {
+	head := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ob.asks.head)))
+	if head == nil {
+		return nil, false
+	}
+	order := (*OrderNode)(head)
+	return order.order, true
 }
 
 func (os *OrderSide) GetDepth(price float64) int32 {
