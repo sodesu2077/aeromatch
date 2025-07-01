@@ -2,7 +2,6 @@ package engine
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/aeromatch/internal/models"
 )
@@ -10,7 +9,7 @@ import (
 type MatchingEngine struct {
 	orderBooks map[string]*OrderBook // Instrument -> OrderBook
 	incoming   chan *models.Order    // Buffered channel for order ingestion
-	trades     chan *models.Trade    // Output channel for matched trades
+	trades     chan *models.Trade    // Buffered channel for matched trades
 	shutdown   chan struct{}
 }
 
@@ -25,6 +24,7 @@ func NewMatchingEngine(bufferSize int) *MatchingEngine {
 
 func (m *MatchingEngine) Start() {
 	go m.processOrders()
+	go m.processTrades()
 }
 
 func (m *MatchingEngine) SubmitOrder(order *models.Order) {
@@ -36,6 +36,7 @@ func (m *MatchingEngine) GetTradesChannel() <-chan *models.Trade {
 }
 
 func (m *MatchingEngine) processOrders() {
+	// TODO: validate orders, check risk, etc.
 	for {
 		select {
 		case order := <-m.incoming:
@@ -46,117 +47,25 @@ func (m *MatchingEngine) processOrders() {
 	}
 }
 
+func (m *MatchingEngine) processTrades() {
+	for _, book := range m.orderBooks {
+		go func(o *OrderBook) {
+			for trade := range book.processedTrades { // blocks until a trade is available
+				go m.broadCastTrade(trade)
+			}
+		}(book)
+	}
+
+}
+
+func (m *MatchingEngine) broadCastTrade(trade *models.Trade) {
+	// TODO: Persist trade to database, notify external systems, etc.
+
+}
+
 func (m *MatchingEngine) matchOrder(order *models.Order) {
 	book := m.getOrderBook(order.Instrument)
-
-	switch order.Side {
-	case models.Buy:
-		m.matchBuyOrder(book, order)
-	case models.Sell:
-		m.matchSellOrder(book, order)
-	}
-}
-
-func (m *MatchingEngine) matchBuyOrder(book *OrderBook, order *models.Order) {
-	remainingQty := order.Quantity
-
-	for remainingQty > 0 {
-		bestAsk, ok := book.GetBestAsk()
-		if !ok {
-			break // No more asks to match
-		}
-
-		if order.Type != models.Market && order.Price < bestAsk.Price {
-			break // Price doesn't cross
-		}
-
-		// Calculate fill quantity
-		fillQty := min(remainingQty, bestAsk.Remaining)
-		fillPrice := bestAsk.Price
-
-		// Execute trade
-		trade := m.createTrade(bestAsk, order, fillPrice, fillQty)
-		m.trades <- trade
-
-		// Update quantities
-		remainingQty -= fillQty
-		bestAsk.Remaining -= fillQty
-		order.Remaining -= fillQty
-		
-
-		// Remove exhausted order
-		if bestAsk.Remaining <= 0 {
-			book.removeAsk(bestAsk)
-		}
-
-		// Handle order types
-		if order.Type == models.IOC && remainingQty > 0 {
-			break // Immediate-or-Cancel: cancel remaining
-		}
-
-	}
-
-	// Add remaining quantity to book if not fully filled
-	if remainingQty > 0 && order.Type != models.IOC && order.Type != models.FOK {
-		book.AddBid(order)
-	}
-}
-
-func (m *MatchingEngine) matchSellOrder(book *OrderBook, order *models.Order) {
-	remainingQty := order.Quantity
-
-	for remainingQty > 0 {
-		bestBid, ok := book.GetBestBid()
-		if !ok {
-			break // No more bids to match
-		}
-
-		if order.Type != models.Market && order.Price > bestBid.Price {
-			break // Price doesn't cross
-		}
-
-		// Calculate fill quantity
-		fillQty := min(remainingQty, bestBid.Remaining)
-		fillPrice := bestBid.Price // Price-time priority
-
-		// Execute trade
-		trade := m.createTrade(bestBid, order, fillPrice, fillQty)
-		m.trades <- trade
-
-		// Update quantities
-		remainingQty -= fillQty
-		bestBid.Remaining -= fillQty
-		order.Remaining -= fillQty
-
-		// Remove exhausted order
-		if bestBid.Remaining <= 0 {
-			book.removeBid(bestBid)
-		}
-
-		// Handle order types
-		if order.Type == models.IOC && remainingQty > 0 {
-			break // Immediate-or-Cancel: cancel remaining
-		}
-	}
-
-	// Add remaining quantity to book if not fully filled
-	if remainingQty > 0 && order.Type != models.IOC && order.Type != models.FOK {
-		book.AddAsk(order)
-	}
-}
-
-func (m *MatchingEngine) createTrade(maker, taker *models.Order, price, qty float64) *models.Trade {
-	return &models.Trade{
-		TradeID:      generateTradeID(),
-		ExecutionID:  atomic.AddUint64(&executionCounter, 1),
-		Price:        price,
-		Quantity:     qty,
-		Timestamp:    time.Now().UnixNano(),
-		MakerOrderID: maker.ID,
-		TakerOrderID: taker.ID,
-		Instrument:   maker.Instrument,
-		Side:         taker.Side,
-	}
+	book.incomingOrders <- order
 }
 
 func (m *MatchingEngine) getOrderBook(instrument string) *OrderBook {
