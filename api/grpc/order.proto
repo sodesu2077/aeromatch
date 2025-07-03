@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package aeromatch;
+
+option go_package = "github.com/aeromatch/api/grpc";
+
+service Trading {
+  rpc SubmitOrder(OrderRequest) returns (OrderResponse) {};
+  rpc SubmitOrderStream(stream OrderRequest) returns (stream OrderResponse) {};
+  rpc GetOrderBook(OrderBookRequest) returns (OrderBookResponse) {};
+  rpc MarketDataStream(MarketDataRequest) returns (stream MarketDataUpdate) {};
+}
+
+// Order messages
+message OrderRequest {
+  uint64 order_id = 1;
+  string client_order_id = 2;
+  double price = 3;
+  double quantity = 4;
+  OrderType order_type = 5;
+  OrderSide side = 6;
+  string instrument = 7;
+}
+
+message OrderResponse {
+  uint64 order_id = 1;
+  OrderStatus status = 2;
+  int64 timestamp = 3;
+  string error = 4;
+}
+
+// Order book messages
+message OrderBookRequest {
+  string instrument = 1;
+  uint32 depth = 2; // Number of price levels to return
+}
+
+message OrderBookResponse {
+  string instrument = 1;
+  int64 timestamp = 2;
+  repeated PriceLevel bids = 3;
+  repeated PriceLevel asks = 4;
+}
+
+message PriceLevel {
+  double price = 1;
+  double quantity = 2;
+  uint32 order_count = 3;
+}
+
+// Market data messages
+message MarketDataRequest {
+  string instrument = 1;
+}
+
+message MarketDataUpdate {
+  MarketDataType type = 1;
+  Trade trade = 2;
+  OrderBookUpdate orderbook = 3;
+  int64 timestamp = 4;
+}
+
+message OrderBookUpdate {
+  repeated PriceLevel bids = 1;
+  repeated PriceLevel asks = 2;
+}
+
+message Trade {
+  uint64 trade_id = 1;
+  uint64 execution_id = 2;
+  double price = 3;
+  double quantity = 4;
+  int64 timestamp = 5;
+  uint64 maker_order_id = 6;
+  uint64 taker_order_id = 7;
+  string instrument = 8;
+  OrderSide side = 9;
+}
+
+// Enums
+enum OrderType {
+  LIMIT = 0;
+  MARKET = 1;
+  IOC = 2;      // Immediate-or-Cancel
+  FOK = 3;      // Fill-or-Kill
+  POST_ONLY = 4;
+}
+
+enum OrderSide {
+  BUY = 0;
+  SELL = 1;
+}
+
+enum OrderStatus {
+  PENDING = 0;
+  FILLED = 1;
+  PARTIALLY_FILLED = 2;
+  CANCELLED = 3;
+  REJECTED = 4;
+}
+
+enum MarketDataType {
+  TRADE = 0;
+  ORDER_BOOK_UPDATE = 1;
+  HEARTBEAT = 2;
+}
