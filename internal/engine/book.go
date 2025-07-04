@@ -8,19 +8,6 @@ import (
 	"github.com/aeromatch/internal/models"
 )
 
-// Package engine implements a lock-free order book for matching buy and sell orders
-// in a high-frequency trading environment. It uses atomic operations and
-// padded structures to avoid false sharing, ensuring high performance and low latency.
-// The order book supports concurrent access and allows for efficient order matching
-// without traditional locking mechanisms.
-// The order book consists of two sides: bids and asks, each represented as a linked list
-// of orders. Orders are processed in a lock-free manner, allowing for high throughput
-// and low contention. The book supports adding orders, processing incoming orders,
-// and retrieving the best bid and ask prices. It also provides methods to get the depth
-// and total volume at specific prices, enabling efficient market data retrieval.
-// The implementation is designed to handle a large number of orders and trades,
-// making it suitable for high-frequency trading applications where performance is critical.
-
 const (
 	cacheLineSize = 64
 	paddedSize    = (cacheLineSize / unsafe.Sizeof(uint64(0))) - 1
