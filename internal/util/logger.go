@@ -256,3 +256,49 @@ func (l *Logger) Close() error {
 	}
 	return nil
 }
+
+// Public logging methods
+
+func (l *Logger) Debug(msg string, args ...interface{}) {
+	l.logInternal(LevelDebug, msg, args...)
+}
+
+func (l *Logger) Info(msg string, args ...interface{}) {
+	l.logInternal(LevelInfo, msg, args...)
+}
+
+func (l *Logger) Warn(msg string, args ...interface{}) {
+	l.logInternal(LevelWarn, msg, args...)
+}
+
+func (l *Logger) Error(msg string, args ...interface{}) {
+	l.logInternal(LevelError, msg, args...)
+}
+
+func (l *Logger) Fatal(msg string, args ...interface{}) {
+	l.logInternal(LevelFatal, msg, args...)
+}
+
+func (l *Logger) Panic(msg string, args ...interface{}) {
+	l.logInternal(LevelPanic, msg, args...)
+}
+
+func GetLevel() LogLevel {
+	if defaultLogger != nil {
+		return defaultLogger.config.Level
+	}
+	return LevelInfo
+}
+
+func SetGlobalLevel(level LogLevel) {
+	if defaultLogger != nil {
+		defaultLogger.SetLevel(level)
+	}
+}
+
+// Sync flushes any buffered log entries
+func Sync() {
+	if defaultLogger != nil && defaultLogger.file != nil {
+		defaultLogger.file.Sync()
+	}
+}
