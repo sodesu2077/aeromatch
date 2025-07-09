@@ -5,7 +5,11 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
+	"time"
 )
 
 type LogLevel int
@@ -135,5 +139,120 @@ func NewLogger(config LoggerConfig) (*Logger, error) {
 
 // setupLogFile sets up log file with rotation
 func setupLogFile(filePath string) (*os.File, error) {
-	return nil, nil
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil { // permissions: rwxr-xr-x
+		return nil, err
+	}
+
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
+}
+
+func (l *Logger) SetLevel(level LogLevel) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.config.Level = level
+}
+
+func (l *Logger) SetCallerInfo(enabled bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.callerInfo = enabled
+}
+
+// logInternal is the internal logging method
+func (l *Logger) logInternal(level LogLevel, msg string, args ...interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Check if we should log this level
+	if level < l.config.Level {
+		return
+	}
+
+	// Format the message
+	formattedMsg := fmt.Sprintf(msg, args...)
+
+	// Get caller information if enabled
+	var callerInfo string
+	if l.callerInfo && level >= LevelDebug {
+		callerInfo = l.getCallerInfo()
+	}
+
+	var logEntry string
+	switch l.config.Format {
+	case "json":
+		logEntry = l.formatJSON(level, formattedMsg, callerInfo)
+	default:
+		logEntry = l.formatText(level, formattedMsg, callerInfo)
+	}
+
+	l.logger.Println(logEntry)
+
+	// For fatal and panic, handle appropriately
+	switch level {
+	case LevelFatal:
+		os.Exit(1) // TODO: Implement proper fatal error handling
+	case LevelPanic:
+		panic(formattedMsg)
+	}
+}
+
+// formatText formats a log entry in text format
+func (l *Logger) formatText(level LogLevel, msg, callerInfo string) string {
+	timestamp := time.Now().Format("2006-01-02T15:04:05.000Z07:00")
+
+	entry := fmt.Sprintf("%s %-5s %s", timestamp, level.String(), msg)
+	if callerInfo != "" {
+		entry += " " + callerInfo
+	}
+
+	return entry
+}
+
+// formatJSON formats a log entry in JSON format
+func (l *Logger) formatJSON(level LogLevel, msg, callerInfo string) string {
+	timestamp := time.Now().Format(time.RFC3339Nano)
+
+	entry := fmt.Sprintf(`{"time":"%s","level":"%s","message":%q`,
+		timestamp, level.String(), msg)
+
+	if callerInfo != "" {
+		// Parse caller info into components
+		if parts := strings.Split(callerInfo, ":"); len(parts) >= 2 { // TODO: Implement proper caller info parsing
+			entry += fmt.Sprintf(`,"file":%q,"line":%q`, parts[0], parts[1])
+		}
+	}
+
+	entry += "}"
+	return entry
+}
+
+// getCallerInfo returns the caller file and line number
+func (l *Logger) getCallerInfo() string {
+	// Skip 4 callers: getCallerInfo → logInternal → public method (Debug/Info/etc.) → actual caller
+	_, file, line, ok := runtime.Caller(4)
+	if !ok {
+		return ""
+	}
+
+	// Get just the filename, not the full path
+	filename := filepath.Base(file)
+	return fmt.Sprintf("%s:%d", filename, line)
+}
+
+// Close closes the logger and any open files
+func (l *Logger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
 }
