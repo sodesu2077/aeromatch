@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -17,23 +18,23 @@ import (
 // gRPC server for AeroMatch order submission and market data
 
 type GRPCServer struct {
-	engine      *engine.MatchingEngine
-	server      *grpc.Server
-	listener    net.Listener
-	shutdownWg  sync.WaitGroup
-	grpcapi.UnimplementedTradingServer // Embed the unimplemented server to satisfy the interface
+	engine                             *engine.MatchingEngine
+	server                             *grpc.Server
+	listener                           net.Listener
+	shutdownWg                         sync.WaitGroup // Wait for all goroutines to finish
+	grpcapi.UnimplementedTradingServer                // Embed the unimplemented server to satisfy the interface
 }
 
 // NewGRPCServer creates a new gRPC server for AeroMatch
-func NewGRPCServer(matchingEngine *engine.MatchingEngine, port string) (*GRPCServer, error) {
-	lis, err := net.Listen("tcp", ":"+port)
+func NewGRPCServer(matchingEngine *engine.MatchingEngine, port int, maxMessageSize int) (*GRPCServer, error) {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
 
 	grpcServer := grpc.NewServer(
-		grpc.MaxRecvMsgSize(64*1024*1024), // 64MB for order batches
-		grpc.MaxSendMsgSize(64*1024*1024),
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
 	)
 
 	s := &GRPCServer{
@@ -80,9 +81,9 @@ func (s *GRPCServer) SubmitOrder(ctx context.Context, req *grpcapi.OrderRequest)
 	s.engine.SubmitOrder(order)
 
 	return &grpcapi.OrderResponse{
-		OrderId:    order.ID,
-		Status:     grpcapi.OrderStatus_PENDING,
-		Timestamp:  order.Timestamp.UnixNano(),
+		OrderId:   order.ID,
+		Status:    grpcapi.OrderStatus_PENDING,
+		Timestamp: order.Timestamp.UnixNano(),
 	}, nil
 }
 
@@ -183,7 +184,7 @@ func (s *GRPCServer) convertOrderSide(side grpcapi.OrderSide) (models.OrderSide,
 func (s *GRPCServer) MarketDataStream(req *grpcapi.MarketDataRequest, stream grpcapi.Trading_MarketDataStreamServer) error {
 	// Subscribe to trade channel from matching engine
 	tradeChan := s.engine.GetTradesChannel()
-	
+
 	for {
 		select {
 		case trade := <-tradeChan:

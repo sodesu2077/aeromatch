@@ -1,25 +1,30 @@
 package engine
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/aeromatch/internal/models"
 )
 
 type MatchingEngine struct {
-	orderBooks map[string]*OrderBook // Instrument -> OrderBook
-	incoming   chan *models.Order    // Buffered channel for order ingestion
-	trades     chan *models.Trade    // Buffered channel for matched trades
+	orderBooks sync.Map           // Instrument -> OrderBook
+	incoming   chan *models.Order // Buffered channel for order ingestion
+	trades     chan *models.Trade // Buffered channel for matched trades
 	shutdown   chan struct{}
 }
 
 func NewMatchingEngine(bufferSize int) *MatchingEngine {
 	return &MatchingEngine{
-		orderBooks: make(map[string]*OrderBook),
+		orderBooks: sync.Map{},
 		incoming:   make(chan *models.Order, bufferSize),
 		trades:     make(chan *models.Trade, bufferSize*2),
 		shutdown:   make(chan struct{}),
 	}
+}
+
+func (m *MatchingEngine) RegisterOrderBook(instrument string, book *OrderBook) {
+	m.orderBooks.Store(instrument, book)
 }
 
 func (m *MatchingEngine) Start() {
@@ -48,14 +53,15 @@ func (m *MatchingEngine) processOrders() {
 }
 
 func (m *MatchingEngine) processTrades() {
-	for _, book := range m.orderBooks {
+	m.orderBooks.Range(func(key, value interface{}) bool {
+		book := value.(*OrderBook)
 		go func(o *OrderBook) {
 			for trade := range book.processedTrades { // blocks until a trade is available
-				go m.broadCastTrade(trade)
+				go m.broadCastTrade(trade) // TODO: Use a worker pool
 			}
 		}(book)
-	}
-
+		return true
+	})
 }
 
 func (m *MatchingEngine) broadCastTrade(trade *models.Trade) {
@@ -69,11 +75,13 @@ func (m *MatchingEngine) matchOrder(order *models.Order) {
 }
 
 func (m *MatchingEngine) getOrderBook(instrument string) *OrderBook {
-	// Double-checked locking for lazy initialization
-	book, exists := m.orderBooks[instrument]
-	if !exists {
-		book = NewOrderBook(1024) // Initial capacity; TODO: make configurable
-		m.orderBooks[instrument] = book
+	value, ok := m.orderBooks.Load(instrument)
+	if !ok {
+		return nil
+	}
+	book, ok := value.(*OrderBook)
+	if !ok {
+		return nil
 	}
 	return book
 }
