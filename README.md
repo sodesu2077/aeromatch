@@ -1,3 +1,31 @@
+## Overview
+
+AeroMatch maintains an order book and matches buy/sell orders using a lock-free design to minimize latency and maximize throughput. It's designed for educational purposes to explore:
+
+- Lock-free data structures and atomic operations
+- Low-latency order matching algorithms  
+- Concurrent order processing patterns
+- Memory layout optimization for CPU cache efficiency
+
+## Current Status
+
+**Early Development** - This is an ongoing project with basic functionality implemented.
+
+## Contributing
+
+Contributions are welcome and appreciated. If you're interested in improving AeroMatch or adding new features, feel free to submit a pull request or open an issue.
+
+## Technical Approach
+
+- **Lock-free design** using atomic operations instead of mutexes
+- **CPU cache optimization** through memory layout and padding
+- **Channel-based communication** between components
+- **Minimal GC pressure** through object reuse and pre-allocation
+
+## Project layout
+(not strictly set, but the general outline)
+
+
 ```
 aeromatch/
 │
